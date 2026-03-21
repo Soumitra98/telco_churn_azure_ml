@@ -1,0 +1,20 @@
+#################TELCO AZURE ML###############################
+
+
+CSV Dataset
+   ↓
+Azure ML Workspace
+   ↓
+Training Script (scikit-learn)
+   ↓
+Registered Model
+   ↓
+Azure ML Online Endpoint (REST API)
+   ↓
+Streamlit App (UI)
+
+
+
+Activating The venv
+
+mlopsvenv\Scripts\activate

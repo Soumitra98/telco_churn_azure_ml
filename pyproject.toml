@@ -1,0 +1,21 @@
+[project]
+name = "telco-churn-azure-ml"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "catboost>=1.2.10",
+    "fastapi>=0.135.1",
+    "lightgbm>=4.6.0",
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.3",
+    "openpyxl>=3.1.5",
+    "pandas>=3.0.1",
+    "plotly>=6.6.0",
+    "scikit-learn>=1.8.0",
+    "scipy>=1.17.1",
+    "seaborn>=0.13.2",
+    "shap>=0.51.0",
+    "xgboost>=3.2.0",
+]

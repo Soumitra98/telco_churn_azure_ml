@@ -8,6 +8,7 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import ConfusionMatrixDisplay, roc_auc_score, classification_report, confusion_matrix
 
 # --- 1. Load and Clean Data ---
@@ -35,17 +36,33 @@ preprocessor = ColumnTransformer([
 ])
 
 # Build the base pipeline
-base_pipeline = Pipeline([
+# base_pipeline = Pipeline([
+#     ('prep', preprocessor),
+#     ('dt', DecisionTreeClassifier(random_state=42))
+# ])
+
+base_pipeline = Pipeline(
+    [
     ('prep', preprocessor),
-    ('dt', DecisionTreeClassifier(random_state=42))
-])
+    ('rf', RandomForestClassifier(random_state=42))
+    ]
+)
 
 # --- 4. Hyperparameter Tuning with GridSearchCV ---
 # We use 'dt__' prefix to target the DecisionTreeClassifier step
+# param_grid = {
+#     'dt__max_depth': [3, 5, 10, None],
+#     'dt__min_samples_split': [2, 10, 20],
+#     'dt__criterion': ['gini', 'entropy']
+# }
+
 param_grid = {
-    'dt__max_depth': [3, 5, 10, None],
-    'dt__min_samples_split': [2, 10, 20],
-    'dt__criterion': ['gini', 'entropy']
+    'rf__n_estimators': [100, 200, 300],
+    'rf__max_depth': [None, 10, 20, 30],
+    'rf__min_samples_split': [2, 5, 10],
+    'rf__min_samples_leaf': [1, 2, 4],
+    'rf__max_features': ['sqrt', 'log2'],
+    'rf__bootstrap': [True, False]
 }
 
 # Use StratifiedKFold to handle class imbalance
@@ -86,7 +103,7 @@ plt.show()
 
 # --- 7. Interpretability with SHAP ---
 # Extract the trained model and feature names
-trained_model = best_pipeline.named_steps['dt']
+trained_model = best_pipeline.named_steps['rf']
 feature_names = best_pipeline.named_steps['prep'].get_feature_names_out()
 
 # Transform test data for SHAP

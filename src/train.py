@@ -1,104 +1,100 @@
 import numpy as np
 import pandas as pd
 import joblib
-from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
+import shap
+from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import ConfusionMatrixDisplay, roc_auc_score, classification_report, confusion_matrix
-import matplotlib.pyplot as plt
-import xgboost as xgb
 from sklearn.tree import DecisionTreeClassifier
-import shap
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import ConfusionMatrixDisplay, roc_auc_score, classification_report, confusion_matrix
 
-# Loading the data for model training and model building
-df = pd.read_csv(r'D:\e2eML\telco_churn_azure_ml\data\WA_Fn-UseC_-Telco-Customer-Churn.csv')
+# --- 1. Load and Clean Data ---
+data_path = r'D:\e2eML\telco_churn_azure_ml\data\WA_Fn-UseC_-Telco-Customer-Churn.csv'
+df = pd.read_csv(data_path)
 
-# Cleaning the data after the initial analysis of our EDA
+# Drop redundant or problematic columns
+df = df.drop(columns=['customerID', 'TotalCharges', 'PhoneService', 'OnlineSecurity',
+                      'OnlineBackup', 'DeviceProtection', 'TechSupport', 'StreamingTV'])
 
-df = df.drop(columns  = ['customerID',
-                         'TotalCharges',
-                         'PhoneService'])
-
-# Defining the target variable and the features for model training and model building
+# Prepare Target and Features
+# Note: X does NOT contain 'Churn', so our pipeline won't look for it later
 y = df['Churn'].map({'Yes': 1, 'No': 0})
 X = df.drop('Churn', axis=1)
 
-# Adding numericla nd categorical columsn to perform the ncessary training and model building
-num_cols = []
-cat_cols = []
+# --- 2. Feature Selection Logic ---
+# Identifying columns based on cardinality
+num_cols = [col for col in X.columns if X[col].nunique() > 5]
+cat_cols = [col for col in X.columns if X[col].nunique() <= 5]
 
-for _ in df.columns:
-    if df[_].nunique() > 5:
-        num_cols.append(_)
-    else:
-        cat_cols.append(_)
-        
-# Remoing the churn column from the categorical columns
-cat_cols.remove('Churn')
-
-# Preprocessing
+# --- 3. Preprocessing & Pipeline Construction ---
 preprocessor = ColumnTransformer([
     ('cat', OneHotEncoder(handle_unknown='ignore'), cat_cols),
     ('num', StandardScaler(), num_cols)
 ])
 
-# Model
-# model = xgb.XGBClassifier(use_label_encoder=False, eval_metric='logloss', random_state=42)
-model = DecisionTreeClassifier(random_state=42)
+# Build the base pipeline
+# base_pipeline = Pipeline([
+#     ('prep', preprocessor),
+#     ('dt', DecisionTreeClassifier(random_state=42))
+# ])
 
-pipeline = Pipeline([
-    ('prep', preprocessor),
-    ('model', model)
-])
+base_pipeline = Pipeline(
+    [
+        ('prep', preprocessor),
+        ('rf', RandomForestClassifier(random_state=42))
+    ]
+)
 
-# Train
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
-print(X_train.columns)
+# --- 4. Hyperparameter Tuning with GridSearchCV ---
+# We use 'dt__' prefix to target the DecisionTreeClassifier step
+# param_grid = {
+#     'dt__max_depth': [3, 5, 10, None],
+#     'dt__min_samples_split': [2, 10, 20],
+#     'dt__criterion': ['gini', 'entropy']
+# }
 
-pipeline.fit(X_train, y_train)
+param_grid = {
+    'rf__n_estimators': [100, 200, 300],
+    'rf__max_depth': [None, 10, 20, 30],
+    'rf__min_samples_split': [2, 5, 10],
+    'rf__min_samples_leaf': [1, 2, 4],
+    'rf__max_features': ['sqrt', 'log2'],
+    'rf__bootstrap': [True, False]
+}
 
-# Evaluate
-y_pred = pipeline.predict(X_test)
+# Use StratifiedKFold to handle class imbalance
+cv_strategy = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-# 2. Print Classification Report
-# This gives you Precision, Recall, and F1-Score per class
-print("Classification Report:")
+grid_search = GridSearchCV(
+    estimator=base_pipeline,
+    param_grid=param_grid,
+    cv=cv_strategy,
+    scoring='f1',  # F1 is better for churn than accuracy
+    n_jobs=-1,
+    verbose=1
+)
+
+# --- 5. Training ---
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, stratify=y, random_state=42
+)
+
+grid_search.fit(X_train, y_train)
+best_pipeline = grid_search.best_estimator_
+
+print(f"Best Parameters: {grid_search.best_params_}")
+
+# --- 6. Evaluation ---
+y_pred = best_pipeline.predict(X_test)
+y_proba = best_pipeline.predict_proba(X_test)[:, 1]
+
+print("\nClassification Report:")
 print(classification_report(y_test, y_pred))
-
-# 3. Create and Plot Confusion Matrix
-cm = confusion_matrix(y_test, y_pred)
-disp = ConfusionMatrixDisplay(
-    confusion_matrix=cm, display_labels=model.classes_)
-
-# Plotting with a nice colour map
-fig, ax = plt.subplots(figsize=(8, 6))
-disp.plot(cmap='Blues', ax=ax)
-plt.title('Confusion Matrix')
-plt.show()
+print(f"ROC-AUC Score: {roc_auc_score(y_test, y_proba):.4f}")
 
 
-auc = roc_auc_score(y_test, y_pred)
-print("ROC-AUC:", auc)
-
-# Save model
-joblib.dump(pipeline, "model.pkl")
-
-
-# 1. Create the explainer (use the model inside your pipeline)
-# If using a pipeline, ensure the model is the final step
-model = pipeline.named_steps['model']
-explainer = shap.TreeExplainer(model)
-
-# 2. Calculate SHAP values for your test set
-# Note: If you used a ColumnTransformer, you must transform X_test first!
-X_test_transformed = pipeline.named_steps['prep'].transform(X_test)
-feature_names = pipeline.named_steps['prep'].get_feature_names_out()
-shap_values = explainer(X_test_transformed)
-shap_values.feature_names = list(feature_names)
-
-# 3. Visualise the first prediction (index 0)
-shap.plots.waterfall(shap_values[0][:, 1])
-
-shap.plots.beeswarm(shap_values[:, :, 1])
+# --- 8. Save Artifacts ---
+joblib.dump(best_pipeline, "telco_churn_model.pkl")

@@ -15,7 +15,8 @@ data_path = r'D:\e2eML\telco_churn_azure_ml\data\WA_Fn-UseC_-Telco-Customer-Chur
 df = pd.read_csv(data_path)
 
 # Drop redundant or problematic columns
-df = df.drop(columns=['customerID', 'TotalCharges', 'PhoneService'])
+df = df.drop(columns=['customerID', 'TotalCharges', 'PhoneService', 'OnlineSecurity', 
+                      'OnlineBackup', 'DeviceProtection', 'TechSupport', 'StreamingTV'])
 
 # Prepare Target and Features
 # Note: X does NOT contain 'Churn', so our pipeline won't look for it later
